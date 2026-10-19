@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Find current weather for a location on a map.">
+    <title>WeatherMap</title>
+  </head>
+  <body>
+    <header>
+      <h1>WeatherMap</h1>
+      <p>Find the weather where you're going.</p>
+    </header>
+
+    <main>
+      <form aria-label="Location search">
+        <label for="location">City or location</label>
+        <input
+          id="location"
+          name="location"
+          type="text"
+          placeholder="e.g. Khartoum"
+          required
+        >
+        <button type="submit" disabled aria-describedby="search-status">Get Weather</button>
+        <p id="search-status">Weather search is not available yet.</p>
+      </form>
+
+      <section aria-labelledby="map-heading">
+        <h2 id="map-heading">Weather map</h2>
+        <div id="map">
+          <p>The map will appear here.</p>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

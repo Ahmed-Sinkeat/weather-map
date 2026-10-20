@@ -115,12 +115,6 @@ h2 {
   box-shadow: 0 3px 12px rgb(24 53 74 / 12%);
 }
 
-#map > p {
-  margin: 0;
-  padding: 2rem;
-  text-align: center;
-}
-
 @media (max-width: 32rem) {
   form {
     grid-template-columns: minmax(0, 1fr);

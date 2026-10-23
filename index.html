@@ -23,6 +23,10 @@
 
     <main>
       <form aria-label="Location search">
+        <label for="api-key">OpenWeatherMap API key</label>
+        <input id="api-key" type="password" required autocomplete="off"
+               aria-describedby="key-help" spellcheck="false">
+        <p id="key-help">Enter your key for this visit. It is sent only to OpenWeatherMap and is not saved.</p>
         <label for="location">City or location</label>
         <input
           id="location"
@@ -32,14 +36,15 @@
           required
         >
         <button type="submit" disabled aria-describedby="search-status">Get Weather</button>
-        <p id="search-status">Weather search is not available yet.</p>
+        <p id="search-status" role="status">Enter your API key and a city to get current weather.</p>
+        <span id="spinner" aria-hidden="true" hidden></span>
       </form>
 
       <section aria-labelledby="map-heading">
         <h2 id="map-heading">Weather map</h2>
         <div id="map" role="region" aria-label="Interactive weather map"></div>
         <p id="map-status" role="status">Loading map...</p>
-        <noscript>Enable JavaScript to view the map.</noscript>
+        <noscript>Enable JavaScript to view the map and search for weather.</noscript>
       </section>
     </main>
   </body>

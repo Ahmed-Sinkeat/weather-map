@@ -39,6 +39,8 @@ form {
 }
 
 label,
+#api-key,
+#key-help,
 #search-status {
   grid-column: 1 / -1;
 }
@@ -96,9 +98,38 @@ button:focus-visible {
   outline-offset: 3px;
 }
 
-#search-status {
+#search-status,
+#key-help {
   margin: 0;
   color: #52697b;
+}
+
+#search-status[data-state="error"],
+#map-status:not(:empty) {
+  padding: 0.75rem 1rem;
+  border: 1px solid #61788a;
+  border-radius: 0.5rem;
+  background: #fff;
+  color: #18354a;
+  overflow-wrap: anywhere;
+}
+
+.weather-popup {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+#spinner:not([hidden]) {
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 3px solid #61788a;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 h2 {
@@ -122,6 +153,10 @@ h2 {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  #spinner {
+    animation: none;
+  }
+
   input,
   button {
     transition: none;

@@ -6,12 +6,15 @@ const searchButton = document.querySelector("button");
 const searchStatus = document.querySelector("#search-status");
 const spinner = document.querySelector("#spinner");
 let map;
+let marker;
+let lastGeocodeAt = 0;
+const locationsByQuery = new Map();
 
 if (!window.L) {
   mapStatus.textContent = "The map could not load. Check your connection and reload the page.";
 } else {
   try {
-    map = L.map("map").setView([15.5007, 32.5599], 11);
+    map = L.map("map").setView([15.5007, 32.5599], 6);
     const tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -31,13 +34,13 @@ if (!window.L) {
   }
 }
 
-async function request(path, params) {
-  const response = await fetch(`https://api.openweathermap.org/${path}?${new URLSearchParams(params)}`, {
+async function request(url, params, service = "Weather") {
+  const response = await fetch(`${url}?${new URLSearchParams(params)}`, {
     signal: AbortSignal.timeout(15000),
   });
-  if (response.status === 401) throw new Error("Check your OpenWeatherMap API key; it may be invalid or not active yet.");
-  if (response.status === 429) throw new Error("OpenWeatherMap request limit reached. Try again later.");
-  if (!response.ok) throw new Error("Weather service is unavailable. Try again later.");
+  if (service === "Weather" && response.status === 401) throw new Error("Check your OpenWeatherMap API key; it may be invalid or not active yet.");
+  if (response.status === 429) throw new Error(`${service} request limit reached. Try again later.`);
+  if (!response.ok) throw new Error(`${service} service is unavailable. Try again later.`);
   return response.json();
 }
 
@@ -58,29 +61,84 @@ form.addEventListener("submit", async (event) => {
   searchStatus.dataset.state = "loading";
   searchStatus.textContent = "Loading weather...";
   try {
-    const locations = await request("geo/1.0/direct", { q: city, limit: 1, appid });
-    if (!Array.isArray(locations)) throw new Error("Weather service returned invalid location data.");
-    if (!locations.length) throw new Error("No city found. Check the spelling or add a country code, e.g. London,GB.");
-    const { lat, lon, name, country } = locations[0] ?? {};
-    if (!Number.isFinite(lat) || Math.abs(lat) > 90 || !Number.isFinite(lon) || Math.abs(lon) > 180 || typeof name !== "string") {
-      throw new Error("Weather service returned invalid location data.");
+    let locations = locationsByQuery.get(city);
+    if (!locations) {
+      // shortcut: one Nominatim request/second per tab; use a shared limiter for multiple users.
+      const delay = 1000 - (Date.now() - lastGeocodeAt);
+      if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+      lastGeocodeAt = Date.now();
+      locations = await request("https://nominatim.openstreetmap.org/search", {
+        q: city, format: "jsonv2", limit: 1,
+      }, "Location");
     }
-    const weather = await request("data/2.5/weather", { lat, lon, units: "metric", appid });
+    if (!Array.isArray(locations)) throw new Error("Location service returned invalid location data.");
+    if (!locations.length) throw new Error("No city found. Check the spelling or include a country, e.g. London, United Kingdom.");
+    const location = locations[0];
+    const lat = Number(location?.lat);
+    const lon = Number(location?.lon);
+    const place = location?.display_name;
+    if (typeof location?.lat !== "string" || !location.lat.trim() ||
+        typeof location?.lon !== "string" || !location.lon.trim() ||
+        !Number.isFinite(lat) || Math.abs(lat) > 90 || !Number.isFinite(lon) || Math.abs(lon) > 180 ||
+        typeof place !== "string" || !place.trim()) {
+      throw new Error("Location service returned invalid location data.");
+    }
+    locationsByQuery.set(city, locations);
+    const weather = await request("https://api.openweathermap.org/data/2.5/weather", { lat, lon, units: "metric", appid });
     const temperature = weather?.main?.temp;
     const humidity = weather?.main?.humidity;
     const description = weather?.weather?.[0]?.description;
     const wind = weather?.wind?.speed;
+    const clouds = weather?.clouds?.all;
+    const icon = weather?.weather?.[0]?.icon;
     if (!Number.isFinite(temperature) || !Number.isFinite(humidity) || humidity < 0 || humidity > 100 ||
-        typeof description !== "string" || !Number.isFinite(wind) || wind < 0) {
+        typeof description !== "string" || !Number.isFinite(wind) || wind < 0 ||
+        !Number.isFinite(clouds) || clouds < 0 || clouds > 100 ||
+        typeof icon !== "string" || !/^(01|02|03|04|09|10|11|13|50)[dn]$/.test(icon)) {
       throw new Error("Weather service returned invalid weather data.");
     }
 
-    const place = typeof country === "string" ? `${name}, ${country}` : name;
     const content = document.createElement("div");
     content.className = "weather-popup";
-    content.textContent = `${place}\n${Math.round(temperature)} °C · ${description}\nHumidity: ${humidity}%\nWind: ${wind} m/s\nWeather: OpenWeatherMap`;
-    map.setView([lat, lon], 11);
-    map.openPopup(content, [lat, lon]);
+    const text = `${place}\n${Math.round(temperature)} °C · ${description}\nHumidity: ${humidity}%\nWind: ${wind} m/s\nClouds: ${clouds}%\nWeather: OpenWeatherMap`;
+    const details = document.createElement("p");
+    details.textContent = text;
+    const image = document.createElement("img");
+    image.src = `https://openweathermap.org/img/wn/${icon}@2x.png`;
+    image.alt = description;
+    image.width = 100;
+    image.height = 100;
+    const share = document.createElement("button");
+    share.type = "button";
+    share.textContent = "Share Weather";
+    share.addEventListener("click", async () => {
+      share.disabled = true;
+      try {
+        if (navigator.share) {
+          await navigator.share({ title: `Weather for ${place}`, text });
+          searchStatus.textContent = "Weather shared.";
+        } else if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+          searchStatus.textContent = "Weather copied to clipboard.";
+        } else {
+          throw new Error("Sharing unavailable");
+        }
+        searchStatus.dataset.state = "ready";
+      } catch (error) {
+        if (error.name !== "AbortError") {
+          searchStatus.dataset.state = "error";
+          searchStatus.textContent = "Could not share weather. Select and copy the weather text instead.";
+        }
+      } finally {
+        share.disabled = false;
+      }
+    });
+    content.append(details, image, share);
+    const nextMarker = L.marker([lat, lon]).bindPopup(content, { autoPan: false }).addTo(map);
+    marker?.remove();
+    marker = nextMarker;
+    map.flyTo([lat, lon], 11, { animate: !window.matchMedia("(prefers-reduced-motion: reduce)").matches });
+    marker.openPopup();
     searchStatus.dataset.state = "ready";
     searchStatus.textContent = `Current weather for ${place}.`;
   } catch (error) {

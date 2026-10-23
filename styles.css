@@ -115,8 +115,17 @@ button:focus-visible {
 }
 
 .weather-popup {
+  max-width: 18rem;
   white-space: pre-line;
   overflow-wrap: anywhere;
+}
+
+.weather-popup p {
+  margin: 0 0 0.5rem;
+}
+
+.weather-popup img {
+  display: block;
 }
 
 #spinner:not([hidden]) {

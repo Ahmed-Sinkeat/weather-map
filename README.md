@@ -25,9 +25,3 @@ The popup's **Share Weather** button opens native sharing when available, otherw
 Nominatim requests are limited to one per second in this page, and successful location lookups are cached for this visit. Its [usage policy](https://operations.osmfoundation.org/policies/nominatim/) also limits total traffic across users; this direct browser setup is intended for a small coursework demo.
 
 Run the map and weather self-check with `node app.test.cjs` (Node.js 18 or newer).
-
-## Submission
-
-Submit `index.html`, `styles.css`, `app.js`, `app.test.cjs` and this README. No build step or API key file is required. Favorites, forecasts and chat are optional bonuses and are not included.
-
-Before submitting, enter your own key and try a valid city, an unknown city, then another valid city. Check marker replacement, the weather icon, sharing, keyboard navigation and the narrow-screen layout. The Nominatim endpoint was checked with a live lookup. Live OpenWeather requests, browser appearance and screen-reader behavior have not been verified here. Review any additional Piazza requirements; they were not provided with the slides.

@@ -24,4 +24,8 @@ The popup's **Share Weather** button opens native sharing when available, otherw
 
 Nominatim requests are limited to one per second in this page, and successful location lookups are cached for this visit. Its [usage policy](https://operations.osmfoundation.org/policies/nominatim/) also limits total traffic across users; this direct browser setup is intended for a small coursework demo.
 
+After each search, a **5-day forecast** (daily min/max and icon, from OpenWeatherMap's [5-day / 3-hour forecast](https://openweathermap.org/forecast5)) appears below the map. If it fails, the current weather still shows. Days are grouped by UTC date.
+
+The popup's **Save favorite** button stores the searched city in `localStorage`; saved cities appear as quick-access buttons above the map, and the popup button toggles to **Remove favorite**.
+
 Run the map and weather self-check with `node app.test.cjs` (Node.js 18 or newer).

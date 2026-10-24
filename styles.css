@@ -128,6 +128,41 @@ button:focus-visible {
   display: block;
 }
 
+#favorites {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+#favorites:empty::before,
+#forecast-status {
+  margin: 0;
+  color: #52697b;
+}
+
+#favorites:empty::before {
+  content: "Save a city from its popup to see it here.";
+}
+
+#forecast-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+#forecast-list li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.75rem;
+  border: 1px solid #61788a;
+  border-radius: 0.5rem;
+  background: #fff;
+}
+
 #spinner:not([hidden]) {
   width: 1.5rem;
   height: 1.5rem;

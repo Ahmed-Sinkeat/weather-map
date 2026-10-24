@@ -5,6 +5,11 @@ const keyInput = document.querySelector("#api-key");
 const searchButton = document.querySelector("button");
 const searchStatus = document.querySelector("#search-status");
 const spinner = document.querySelector("#spinner");
+const favoritesList = document.querySelector("#favorites");
+const forecastList = document.querySelector("#forecast-list");
+const forecastStatus = document.querySelector("#forecast-status");
+const iconPattern = /^(01|02|03|04|09|10|11|13|50)[dn]$/;
+const favoritesKey = "weathermap-favorites";
 let map;
 let marker;
 let lastGeocodeAt = 0;
@@ -32,6 +37,76 @@ if (!window.L) {
     map = undefined;
     mapStatus.textContent = "The map could not start. Reload the page to try again.";
   }
+}
+
+let favorites = [];
+try {
+  const saved = JSON.parse(localStorage.getItem(favoritesKey));
+  if (Array.isArray(saved)) favorites = saved.filter((name) => typeof name === "string").slice(-10);
+} catch {
+  // Storage blocked or corrupt: start with no favorites.
+}
+
+function renderFavorites() {
+  favoritesList.textContent = "";
+  for (const name of favorites) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = name;
+    button.addEventListener("click", () => {
+      locationInput.value = name;
+      form.requestSubmit();
+    });
+    favoritesList.append(button);
+  }
+}
+renderFavorites();
+
+function errorMessage(error) {
+  return error.name === "TimeoutError"
+    ? "The request timed out. Try again."
+    : error instanceof TypeError || error instanceof SyntaxError
+      ? "Could not load weather. Check your connection and try again."
+      : error.message;
+}
+
+// ponytail: days are grouped by UTC date, not the city's local date; use data.city.timezone if that matters.
+function renderForecast(data) {
+  if (!Array.isArray(data?.list)) throw new Error("Forecast service returned invalid forecast data.");
+  const days = new Map();
+  for (const item of data.list) {
+    const date = item?.dt_txt;
+    const temp = item?.main?.temp;
+    const description = item?.weather?.[0]?.description;
+    const icon = item?.weather?.[0]?.icon;
+    if (typeof date !== "string" || !/^\d{4}-\d\d-\d\d \d\d:/.test(date) || !Number.isFinite(temp) ||
+        typeof description !== "string" || typeof icon !== "string" || !iconPattern.test(icon)) {
+      throw new Error("Forecast service returned invalid forecast data.");
+    }
+    const day = days.get(date.slice(0, 10)) ?? { min: temp, max: temp };
+    day.min = Math.min(day.min, temp);
+    day.max = Math.max(day.max, temp);
+    if (!day.icon || date.includes(" 12:")) Object.assign(day, { icon, description });
+    days.set(date.slice(0, 10), day);
+  }
+  if (!days.size) throw new Error("Forecast service returned invalid forecast data.");
+  forecastList.textContent = "";
+  for (const [date, day] of [...days].slice(0, 5)) {
+    const item = document.createElement("li");
+    const label = document.createElement("strong");
+    label.textContent = new Date(`${date}T00:00:00Z`)
+      .toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+    const image = document.createElement("img");
+    image.src = `https://openweathermap.org/img/wn/${day.icon}@2x.png`;
+    image.alt = day.description;
+    image.width = 50;
+    image.height = 50;
+    const range = document.createElement("span");
+    range.textContent = `${Math.round(day.min)}–${Math.round(day.max)} °C`;
+    item.append(label, image, range);
+    forecastList.append(item);
+  }
+  forecastStatus.textContent = "";
 }
 
 async function request(url, params, service = "Weather") {
@@ -94,7 +169,7 @@ form.addEventListener("submit", async (event) => {
     if (!Number.isFinite(temperature) || !Number.isFinite(humidity) || humidity < 0 || humidity > 100 ||
         typeof description !== "string" || !Number.isFinite(wind) || wind < 0 ||
         !Number.isFinite(clouds) || clouds < 0 || clouds > 100 ||
-        typeof icon !== "string" || !/^(01|02|03|04|09|10|11|13|50)[dn]$/.test(icon)) {
+        typeof icon !== "string" || !iconPattern.test(icon)) {
       throw new Error("Weather service returned invalid weather data.");
     }
 
@@ -133,7 +208,23 @@ form.addEventListener("submit", async (event) => {
         share.disabled = false;
       }
     });
-    content.append(details, image, share);
+    const favorite = document.createElement("button");
+    favorite.type = "button";
+    const labelFavorite = () => {
+      favorite.textContent = favorites.includes(city) ? "Remove favorite" : "Save favorite";
+    };
+    labelFavorite();
+    favorite.addEventListener("click", () => {
+      favorites = favorites.includes(city) ? favorites.filter((name) => name !== city) : [...favorites, city].slice(-10);
+      try {
+        localStorage.setItem(favoritesKey, JSON.stringify(favorites));
+      } catch {
+        // Not saved across visits, but still works for this one.
+      }
+      renderFavorites();
+      labelFavorite();
+    });
+    content.append(details, image, share, favorite);
     const nextMarker = L.marker([lat, lon]).bindPopup(content, { autoPan: false }).addTo(map);
     marker?.remove();
     marker = nextMarker;
@@ -141,13 +232,15 @@ form.addEventListener("submit", async (event) => {
     marker.openPopup();
     searchStatus.dataset.state = "ready";
     searchStatus.textContent = `Current weather for ${place}.`;
+    try {
+      renderForecast(await request("https://api.openweathermap.org/data/2.5/forecast", { lat, lon, units: "metric", appid }, "Forecast"));
+    } catch (error) {
+      forecastList.textContent = "";
+      forecastStatus.textContent = `Forecast unavailable. ${errorMessage(error)}`;
+    }
   } catch (error) {
     searchStatus.dataset.state = "error";
-    searchStatus.textContent = error.name === "TimeoutError"
-      ? "The request timed out. Try again."
-      : error instanceof TypeError || error instanceof SyntaxError
-        ? "Could not load weather. Check your connection and try again."
-        : error.message;
+    searchStatus.textContent = errorMessage(error);
   } finally {
     searchButton.disabled = false;
     spinner.hidden = true;

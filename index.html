@@ -40,11 +40,22 @@
         <span id="spinner" aria-hidden="true" hidden></span>
       </form>
 
+      <section aria-labelledby="favorites-heading">
+        <h2 id="favorites-heading">Favorites</h2>
+        <div id="favorites"></div>
+      </section>
+
       <section aria-labelledby="map-heading">
         <h2 id="map-heading">Weather map</h2>
         <div id="map" role="region" aria-label="Interactive weather map"></div>
         <p id="map-status" role="status">Loading map...</p>
         <noscript>Enable JavaScript to view the map and search for weather.</noscript>
+      </section>
+
+      <section aria-labelledby="forecast-heading">
+        <h2 id="forecast-heading">5-day forecast</h2>
+        <p id="forecast-status" role="status">Search for a city to see its 5-day forecast.</p>
+        <ul id="forecast-list"></ul>
       </section>
     </main>
   </body>

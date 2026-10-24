@@ -4,6 +4,14 @@ const { runInNewContext } = require("node:vm");
 
 const source = readFileSync(`${__dirname}/app.js`, "utf8");
 
+const store = {};
+const localStorage = { getItem: (key) => store[key] ?? null, setItem(key, value) { store[key] = value; } };
+const forecast = { list: [
+  { dt_txt: "2026-01-01 09:00:00", main: { temp: 10 }, weather: [{ description: "mist", icon: "50d" }] },
+  { dt_txt: "2026-01-01 12:00:00", main: { temp: 20 }, weather: [{ description: "clear sky", icon: "01d" }] },
+  ...[2, 3, 4, 5, 6, 7].map((day) => ({ dt_txt: `2026-01-0${day} 12:00:00`, main: { temp: day }, weather: [{ description: "rain", icon: "10d" }] })),
+] };
+
 function start(mode = "ready", responses = [], navigator = {}, reducedMotion = false) {
   const status = { textContent: "Loading map..." };
   const elements = {
@@ -14,6 +22,9 @@ function start(mode = "ready", responses = [], navigator = {}, reducedMotion = f
     "button": { disabled: true, setAttribute(name, value) { this[name] = value; } },
     "#search-status": { textContent: "", dataset: {} },
     "#spinner": { hidden: true },
+    "#favorites": { textContent: "", children: [], append(item) { this.children.push(item); } },
+    "#forecast-list": { textContent: "", children: [], append(item) { this.children.push(item); } },
+    "#forecast-status": { textContent: "" },
   };
   const requests = [];
   const views = [];
@@ -69,6 +80,8 @@ function start(mode = "ready", responses = [], navigator = {}, reducedMotion = f
   runInNewContext(source, {
     window: { L: mode === "missing" ? undefined : L, matchMedia: () => ({ matches: reducedMotion }) },
     navigator,
+    localStorage,
+    JSON, Date, Math,
     setTimeout(callback, delay) { delays.push(delay); callback(); },
     L,
     URLSearchParams,
@@ -113,7 +126,7 @@ assert.match(start("broken").status.textContent, /map could not start/);
 async function checkSearch() {
   const city = { display_name: "Khartoum, Sudan", lat: "15.5", lon: "32.5" };
   const weather = { main: { temp: 30, humidity: 25 }, weather: [{ description: "clear sky", icon: "01d" }], clouds: { all: 10 }, wind: { speed: 3 } };
-  const app = start("ready", [[city], weather, [city], weather, weather]);
+  const app = start("ready", [[city], weather, forecast, [city], weather, forecast, weather, forecast]);
   assert.equal(app.elements.button.disabled, false, "search must be enabled after map setup");
   const search = () => app.elements.form.submit({ preventDefault() {} });
   const pending = search();
@@ -145,16 +158,40 @@ async function checkSearch() {
   assert.equal(app.popup.content.children[2].type, "button");
   assert.equal(app.markers.length, 1);
   assert.deepEqual(app.flights[0], { zoom: 11, animate: true });
+  const days = app.elements["#forecast-list"].children;
+  assert.equal(days.length, 5, "forecast shows five days");
+  assert.equal(app.elements["#forecast-status"].textContent, "");
+  assert.equal(days[0].children[2].textContent, "10–20 °C", "daily min/max");
+  assert.equal(days[0].children[1].alt, "clear sky", "icon from the midday entry");
+  assert.equal(app.requests[2].pathname, "/data/2.5/forecast");
+  assert.equal(app.requests[2].searchParams.get("lat"), "15.5");
+
+  const fav = app.popup.content.children[3];
+  assert.equal(fav.textContent, "Save favorite");
+  fav.events.click();
+  assert.deepEqual(JSON.parse(store["weathermap-favorites"]), ["Khartoum"]);
+  assert.equal(fav.textContent, "Remove favorite");
+  fav.events.click();
+  assert.deepEqual(JSON.parse(store["weathermap-favorites"]), []);
+  fav.events.click();
+  assert.equal(start().elements["#favorites"].children[0].textContent, "Khartoum", "saved favorites reload");
+  assert.equal(JSON.parse(store["weathermap-favorites"]).length, 1);
+
+  const badForecast = start("ready", [[city], weather, { list: [{ dt_txt: "x" }] }]);
+  await badForecast.elements.form.submit({ preventDefault() {} });
+  assert.match(badForecast.elements["#forecast-status"].textContent, /Forecast unavailable/);
+  assert.equal(badForecast.elements["#search-status"].dataset.state, "ready", "forecast failure keeps the weather result");
   app.elements["#location"].value = "Port Sudan";
   await search();
-  assert.equal(app.requests.length, 4, "a later search must work");
+  assert.equal(app.requests.length, 6, "a later search must work");
   assert.ok(app.delays.length, "repeat geocoding must respect Nominatim's rate limit");
   assert.equal(app.markers[0].removed, true, "replace the old marker after a successful search");
   assert.equal(app.markers[1].removed, false);
   await search();
   assert.equal(app.elements["#search-status"].dataset.state, "ready", "cached location must still produce a weather result");
-  assert.equal(app.requests.length, 5, "reuse geocoding for repeat queries, but refresh weather");
-  assert.equal(app.requests.at(-1).pathname, "/data/2.5/weather");
+  assert.equal(app.requests.length, 8, "reuse geocoding for repeat queries, but refresh weather");
+  assert.equal(app.requests.at(-1).pathname, "/data/2.5/forecast");
+  assert.equal(app.requests.at(-2).pathname, "/data/2.5/weather");
 
   for (const [responses, message] of [
     [[[]], /No city found/],
@@ -198,7 +235,7 @@ async function checkSearch() {
 
   const nextCity = { display_name: "الخرطوم & London,GB", lat: "0", lon: "0" };
   const recovery = start("ready", [
-    [city], weather, [], [nextCity],
+    [city], weather, forecast, [], [nextCity],
     { main: { temp: 0, humidity: 0 }, weather: [{ description: "clear sky", icon: "01n" }], clouds: { all: 0 }, wind: { speed: 0 } },
   ]);
   const retry = () => recovery.elements.form.submit({ preventDefault() {} });
@@ -211,7 +248,7 @@ async function checkSearch() {
   assert.deepEqual(recovery.views.at(-1), [15.5, 32.5], "failed searches must not move the map");
   recovery.elements["#location"].value = `  ${nextCity.display_name}  `;
   await retry();
-  assert.equal(recovery.requests[3].searchParams.get("q"), nextCity.display_name);
+  assert.equal(recovery.requests[4].searchParams.get("q"), nextCity.display_name);
   assert.deepEqual(recovery.popup.center, [0, 0]);
   assert.match(recovery.popup.content.children[0].textContent, /0 °C.*0%.*0 m\/s/s);
   assert.equal(recovery.elements["#search-status"].dataset.state, "ready");
